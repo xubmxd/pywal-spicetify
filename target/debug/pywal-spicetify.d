@@ -1,0 +1,1 @@
+/home/xubm/.local/src/pywal-spicetify/target/debug/pywal-spicetify: /home/xubm/.local/src/pywal-spicetify/src/main.rs /home/xubm/.local/src/pywal-spicetify/src/spicetify.rs /home/xubm/.local/src/pywal-spicetify/src/wal.rs

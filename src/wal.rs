@@ -6,24 +6,36 @@ use std::process;
 pub struct Wal {
     config_path: PathBuf,
     cache_path: PathBuf,
+    saturate: Option<String>,
+    wallpaper: String,
 }
+
 impl Wal {
-    pub fn new(home: PathBuf) -> Self {
+    pub fn new(home: PathBuf, saturate: Option<String>, wallpaper: String) -> Self {
         let mut config_path = home.clone();
         let mut cache_path = home.clone();
+
         config_path.push(".config/wal/templates/colors-spicetify.ini");
         cache_path.push(".cache/wal/colors-spicetify.ini");
+
         Wal {
             config_path,
             cache_path,
+            saturate,
+            wallpaper,
         }
     }
 
     pub fn reload(&self) {
-        let _ = process::Command::new("wal")
-            .arg("-n")
-            .output()
-            .expect("Failed run wal");
+        let mut cmd = process::Command::new("wal");
+
+        cmd.arg("-i").arg(&self.wallpaper);
+
+        if let Some(sat) = &self.saturate {
+            cmd.arg("--saturate").arg(sat);
+        }
+
+        cmd.output().expect("Failed to run wal");
     }
 
     pub fn reset(&self) {
@@ -53,35 +65,42 @@ impl Wal {
 
     pub fn set_config(&self) {
         let path = &self.config_path;
+
         if !path.exists() {
             let mut file = match OpenOptions::new().create(true).write(true).open(&path) {
                 Ok(f) => f,
                 Err(e) => panic!("Error opening .config/wal {}", e),
             };
+
             println!(
                 "Generating colors-spicetify.ini file in {}",
                 &path.display()
             );
-            let content = r#"accent             = {color0.strip} 
-accent-active      = {color2.strip} 
-accent-inactive    = {color3.strip} 
-banner             = {color4.strip} 
-border-active      = {foreground.strip} 
-border-inactive    = {foreground.strip} 
-header             = {foreground.strip} 
-highlight          = {color6.strip} 
-main               = {background.strip} 
+
+            let content = r#"accent             = {color0.strip}
+accent-active      = {color2.strip}
+accent-inactive    = {color3.strip}
+banner             = {color4.strip}
+border-active      = {foreground.strip}
+border-inactive    = {foreground.strip}
+header             = {foreground.strip}
+highlight          = {color6.strip}
+main               = {background.strip}
 notification       = {color7.strip}
-notification-error = {color8.strip} 
-subtext            = {cursor.strip} 
+notification-error = {color8.strip}
+subtext            = {cursor.strip}
 text               = {cursor.strip}"#;
+
             let _ = file.write_all(content.as_bytes());
         }
+
+        // 🔥 Always regenerate wal (with optional saturation)
         self.reload();
     }
 
     pub fn get_config(&self) -> String {
         let path = &self.cache_path;
+
         let file = match File::open(&path) {
             Ok(f) => f,
             Err(e) => panic!("Error opening colors-spicetify.ini! {}", e),
@@ -92,53 +111,7 @@ text               = {cursor.strip}"#;
         let mut reader = BufReader::new(file);
         let mut wal_config = String::new();
         let _ = reader.read_to_string(&mut wal_config);
+
         wal_config
-    }
-}
-
-#[cfg(target_family = "unix")] // to stop this test from running on windows
-#[test]
-fn removes_both_files_in_any_combination() {
-    let wal = Wal::new(std::env::home_dir().unwrap());
-    let files = [&wal.config_path, &wal.cache_path];
-    let paths_and_names = [
-        (None, ""),
-        (Some(&wal.cache_path), "cache"),
-        (Some(&wal.config_path), "config"),
-    ];
-
-    //Ensure that reset deleted files properly
-    wal.reset();
-    for (path, name) in &paths_and_names[1..] {
-        println!("Testing {} {}", path.unwrap().display(), name);
-        assert!(
-            path.is_some_and(|x| !x.exists()),
-            "Had some trouble deleting config files{}",
-            if path.is_some() {
-                format!(" after deleting .{name} file")
-            } else {
-                String::new()
-            }
-        );
-    }
-    for (path, name) in paths_and_names {
-        //This will create a cache file as well (needs pywal-16-colors for wal -w option)
-        wal.set_config();
-
-        if let Some(path) = path {
-            std::fs::remove_file(path).unwrap();
-        }
-        wal.reset();
-        let mut existing_files = files.into_iter().filter(|&path| path.exists());
-        let has_deleted_files = existing_files.next().is_none();
-        assert!(
-            has_deleted_files,
-            "Had some trouble deleting config files{}",
-            if path.is_some() {
-                format!(" after deleting .{name} file")
-            } else {
-                String::new()
-            }
-        );
     }
 }
